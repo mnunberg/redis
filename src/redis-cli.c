@@ -118,6 +118,9 @@ static struct config {
     int eval_ldb_end;   /* Lua debugging session ended. */
     int enable_ldb_on_eval; /* Handle manual SCRIPT DEBUG + EVAL commands. */
     int last_cmd_type;
+    char *ssl_cert;
+    char *ssl_ca;
+    char *ssl_key;
 } config;
 
 /* User preferences. */
@@ -603,6 +606,10 @@ static int cliConnect(int force) {
 
         if (config.hostsocket == NULL) {
             context = redisConnect(config.hostip,config.hostport);
+            if (context && config.ssl_cert && !context->err) {
+              redisSecureConnection(context, config.ssl_ca, config.ssl_cert,
+                                    config.ssl_key);
+            }
         } else {
             context = redisConnectUnix(config.hostsocket);
         }
@@ -1038,6 +1045,10 @@ static redisReply *reconnectingRedisCommand(redisContext *c, const char *fmt, ..
             redisFree(c);
             c = redisConnect(config.hostip,config.hostport);
             usleep(1000000);
+            if (config.ssl_cert) {
+              redisSecureConnection(c, config.ssl_ca, config.ssl_cert,
+                                    config.ssl_key);
+            }
         }
 
         va_start(ap,fmt);
@@ -1123,6 +1134,12 @@ static int parseOptions(int argc, char **argv) {
         } else if (!strcmp(argv[i],"--rdb") && !lastarg) {
             config.getrdb_mode = 1;
             config.rdb_filename = argv[++i];
+        } else if (!strcmp(argv[i], "--ssl-cert") && !lastarg) {
+            config.ssl_cert = argv[++i];
+        } else if (!strcmp(argv[i], "--ssl-ca") && !lastarg) {
+            config.ssl_ca = argv[++i];
+        } else if (!strcmp(argv[i], "--ssl-key") && !lastarg) {
+            config.ssl_key = argv[++i];
         } else if (!strcmp(argv[i],"--pipe")) {
             config.pipe_mode = 1;
         } else if (!strcmp(argv[i],"--pipe-timeout") && !lastarg) {
@@ -1238,6 +1255,9 @@ static void usage(void) {
 "  --ldb-sync-mode    Like --ldb but uses the synchronous Lua debugger, in\n"
 "                     this mode the server is blocked and script changes are\n"
 "                     are not rolled back from the server memory.\n"
+" --ssl-cert          Path to client certificate\n"
+" --ssl-key           Path to client key\n"
+" --ssl-ca            Path to SSL certificate authority\n"
 "  --help             Output this help and exit.\n"
 "  --version          Output version and exit.\n"
 "\n"
